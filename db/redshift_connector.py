@@ -20,16 +20,11 @@ class RedshiftConnector(BaseDBConnector):
             self.connection = psycopg2.connect(
                 host=self.config.host,
                 port=self.config.port,
-                database=self.config.database,
+                dbname=self.config.database,  # database 대신 dbname 사용
                 user=self.config.username,
                 password=self.config.password
             )
             self.cursor = self.connection.cursor()
-            
-            # 스키마 설정 (필요한 경우)
-            if self.config.schema:
-                self.cursor.execute(f"SET search_path TO {self.config.schema}")
-                
             logger.info("Redshift DB 연결 성공")
         except Exception as e:
             logger.error(f"Redshift DB 연결 실패: {str(e)}")

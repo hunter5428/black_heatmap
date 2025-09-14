@@ -62,6 +62,7 @@ class IntegratedProcessor:
             
             # Redshift 결과 분리
             df_redshift_base = redshift_result.get('base_info', pd.DataFrame())
+            df_1h_buysell_amountkrw = redshift_result.get('df_1h_buysell_amountkrw', pd.DataFrame())
             df_4h_buysell_amountkrw = redshift_result.get('df_4h_buysell_amountkrw', pd.DataFrame())
             df_day_buysell_info = redshift_result.get('df_day_buysell_info', pd.DataFrame())
             
@@ -69,6 +70,9 @@ class IntegratedProcessor:
                 logger.warning("Redshift에서 조회된 기본 데이터가 없습니다.")
             else:
                 logger.info(f"Redshift 기본 정보 조회 완료: {len(df_redshift_base)}건")
+            
+            if not df_1h_buysell_amountkrw.empty:
+                logger.info(f"1시간 단위 거래 데이터 조회 완료: {len(df_1h_buysell_amountkrw)}건")
             
             if not df_4h_buysell_amountkrw.empty:
                 logger.info(f"4시간 단위 거래 데이터 조회 완료: {len(df_4h_buysell_amountkrw)}건")
@@ -122,12 +126,14 @@ class IntegratedProcessor:
             logger.info("\n" + "="*50)
             logger.info("통합 처리 완료")
             logger.info(f"기본 정보: {len(df_black_mid_info)}건")
+            logger.info(f"1시간 단위 거래: {len(df_1h_buysell_amountkrw)}건")
             logger.info(f"4시간 단위 거래: {len(df_4h_buysell_amountkrw)}건")
             logger.info(f"일별 거래 상세: {len(df_day_buysell_info)}건")
             logger.info("="*50)
             
             return {
                 'df_black_mid_info': df_black_mid_info,
+                'df_1h_buysell_amountkrw': df_1h_buysell_amountkrw,
                 'df_4h_buysell_amountkrw': df_4h_buysell_amountkrw,
                 'df_day_buysell_info': df_day_buysell_info
             }

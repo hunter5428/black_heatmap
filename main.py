@@ -10,6 +10,7 @@ from db.oracle_connector import OracleConnector
 from db.redshift_connector import RedshiftConnector
 from utils.query_loader import QueryLoader
 from utils.excel_processor import ExcelProcessor
+from utils.visualization import TradingVisualizer
 from processors.black_mid_processor import BlackMidProcessor
 from processors.redshift_user_processor import RedshiftUserProcessor
 from processors.integrated_processor import IntegratedProcessor
@@ -151,42 +152,34 @@ def process_integrated_black_mid():
                     excel_processor.save_dataframe(df_day_buysell_info, str(output_path3), 'Daily_Trading')
                     print(f"일별 거래 상세 저장: {output_path3}")
             
-            # 시각화 생성 여부 확인
-            create_viz = input("\n거래 데이터 시각화를 생성하시겠습니까? (y/n): ").lower()
+            # 시각화 생성 여부 확인 (단순화됨)
+            create_viz = input("\n통합 대시보드를 생성하시겠습니까? (y/n): ").lower()
             if create_viz == 'y' and (not df_4h_buysell_amountkrw.empty or not df_day_buysell_info.empty):
+                print("\n통합 대시보드 생성 중...")
+                print("포함 내용:")
+                print("  - 거래 히트맵 (1시간/4시간/1일 전환 가능)")
+                print("  - 시간대별 거래 추이")
+                print("  - 상위 거래자 Top 20")
+                print("  - 마켓별 거래 비중")
+                print("  - 일별 거래 패턴")
+                print("  - 종목별 거래량 Top 10")
+                
                 visualizer = TradingVisualizer()
                 
-                print("\n시각화 옵션:")
-                print("1. 4시간 단위 거래 히트맵")
-                print("2. 시간대별 거래 추이")
-                print("3. 상위 거래자 순위")
-                print("4. 일별 패턴 분석")
-                print("5. 모든 시각화 생성")
+                # 통합 대시보드 생성
+                dashboard_path = visualizer.create_integrated_dashboard(
+                    df_1h_buysell_amountkrw,
+                    df_4h_buysell_amountkrw, 
+                    df_day_buysell_info
+                )
                 
-                viz_choice = input("\n선택 (1-5): ").strip()
-                
-                viz_results = {}
-                
-                if viz_choice == '1' and not df_4h_buysell_amountkrw.empty:
-                    viz_results['heatmap'] = visualizer.create_4h_heatmap(df_4h_buysell_amountkrw)
-                elif viz_choice == '2' and not df_4h_buysell_amountkrw.empty:
-                    viz_results['timeline'] = visualizer.create_trading_timeline(df_4h_buysell_amountkrw)
-                elif viz_choice == '3' and not df_4h_buysell_amountkrw.empty:
-                    top_n = int(input("표시할 상위 사용자 수 (기본값: 20): ") or "20")
-                    viz_results['ranking'] = visualizer.create_user_ranking_chart(df_4h_buysell_amountkrw, top_n)
-                elif viz_choice == '4' and not df_day_buysell_info.empty:
-                    viz_results['daily_pattern'] = visualizer.create_daily_pattern_analysis(df_day_buysell_info)
-                elif viz_choice == '5':
-                    viz_results = visualizer.create_all_visualizations(
-                        df_4h_buysell_amountkrw, 
-                        df_day_buysell_info
-                    )
-                
-                # 생성된 시각화 파일 경로 출력
-                print("\n시각화 파일 생성 완료:")
-                for viz_type, path in viz_results.items():
-                    if path:
-                        print(f"  - {viz_type}: {path}")
+                if dashboard_path:
+                    print(f"\n✅ 통합 대시보드 생성 완료!")
+                    print(f"📍 파일 위치: {dashboard_path}")
+                    print(f"💡 브라우저에서 열어서 확인하세요.")
+                    print(f"💡 히트맵 상단의 드롭다운 메뉴로 시간 단위를 변경할 수 있습니다.")
+                else:
+                    print("\n❌ 대시보드 생성 실패")
             
             return result
         else:
@@ -293,9 +286,6 @@ def run_custom_query():
 
 def main():
     """메인 실행 함수"""
-    # 로그 디렉토리 생성
-    Path('logs').mkdir(exist_ok=True)
-    
     print("\n" + "="*50)
     print("Black Heatmap 데이터 처리 시스템")
     print("="*50)

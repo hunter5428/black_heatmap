@@ -19,440 +19,417 @@ class TradingVisualizer:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 다크 테마 색상 팔레트
+        self.theme = {
+            'bg_color': '#0e1117',  # 배경색 (다크)
+            'paper_color': '#1a1e29',  # 서브 배경색
+            'text_color': '#ffffff',  # 텍스트 색상
+            'grid_color': '#2a3f4f',  # 그리드 색상
+            'primary_colors': ['#00d4ff', '#0099ff', '#0066ff', '#3366ff', '#6699ff'],  # 블루 계열
+            'accent_colors': ['#00ffcc', '#33ffcc', '#66ffcc'],  # 민트 계열
+            'heat_colorscale': [  # 히트맵 색상
+                [0, '#0e1117'],      # 최소값 - 배경색
+                [0.2, '#1a3a52'],    # 진한 파랑
+                [0.4, '#2e5c8a'],    # 파랑
+                [0.6, '#4a8bc2'],    # 하늘색
+                [0.8, '#73b9f5'],    # 밝은 하늘색
+                [1, '#a6d8ff']       # 매우 밝은 하늘색
+            ]
+        }
+        
+        # 공통 레이아웃 설정
+        self.common_layout = {
+            'plot_bgcolor': self.theme['bg_color'],
+            'paper_bgcolor': self.theme['paper_color'],
+            'font': {
+                'color': self.theme['text_color'],
+                'family': 'Arial, sans-serif',
+                'size': 12
+            },
+            'xaxis': {
+                'gridcolor': self.theme['grid_color'],
+                'zerolinecolor': self.theme['grid_color'],
+                'color': self.theme['text_color']
+            },
+            'yaxis': {
+                'gridcolor': self.theme['grid_color'],
+                'zerolinecolor': self.theme['grid_color'],
+                'color': self.theme['text_color']
+            }
+        }
     
-    def create_4h_heatmap(self, df_4h: pd.DataFrame, title: str = "4시간 단위 거래금액 히트맵") -> str:
+    def prepare_heatmap_data(self, df_1h: pd.DataFrame, df_4h: pd.DataFrame) -> dict:
         """
-        4시간 단위 거래금액 히트맵 생성
+        다양한 시간 단위로 히트맵 데이터 준비
         
         Args:
-            df_4h: 4시간 단위 거래 데이터 (mid, time_slot, total_amount_krw 필수)
-            title: 히트맵 제목
+            df_1h: 1시간 단위 거래 데이터
+            df_4h: 4시간 단위 거래 데이터
         
         Returns:
-            저장된 HTML 파일 경로
+            시간 단위별 피벗 데이터
         """
-        try:
-            if df_4h.empty:
-                logger.warning("데이터가 비어있어 히트맵을 생성할 수 없습니다.")
-                return ""
-            
-            # 데이터 피벗 (mid를 행으로, time_slot을 열로)
-            pivot_data = df_4h.pivot_table(
+        result = {}
+        
+        # 1시간 단위 데이터
+        if not df_1h.empty:
+            pivot_1h = df_1h.pivot_table(
                 index='mid',
                 columns='time_slot',
                 values='total_amount_krw',
                 fill_value=0
             )
-            
-            # 시간 슬롯을 문자열로 변환 (더 읽기 쉽게)
-            if not pivot_data.empty:
-                pivot_data.columns = pd.to_datetime(pivot_data.columns).strftime('%m/%d %H시')
-            
-            # 히트맵 생성
-            fig = go.Figure(data=go.Heatmap(
-                z=pivot_data.values,
-                x=pivot_data.columns,
-                y=pivot_data.index,
-                colorscale='RdYlBu_r',  # 빨강(높음) -> 노랑 -> 파랑(낮음)
-                colorbar=dict(
-                    title="거래금액<br>(원)",
-                    titleside="right",
-                    tickmode="linear",
-                    tick0=0,
-                    dtick=pivot_data.values.max() / 10 if pivot_data.values.max() > 0 else 1
-                ),
-                text=np.round(pivot_data.values / 1000000, 1),  # 백만원 단위로 표시
-                texttemplate="%{text}M",
-                textfont={"size": 10},
-                hovertemplate="MID: %{y}<br>시간: %{x}<br>거래금액: ₩%{z:,.0f}<extra></extra>"
-            ))
-            
-            # 레이아웃 설정
-            fig.update_layout(
-                title={
-                    'text': title,
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'font': {'size': 20}
-                },
-                xaxis={
-                    'title': '시간 (4시간 단위)',
-                    'tickangle': -45,
-                    'side': 'bottom'
-                },
-                yaxis={
-                    'title': 'MID (계정)',
-                    'autorange': 'reversed'  # 위에서 아래로 정렬
-                },
-                height=max(400, len(pivot_data.index) * 20 + 200),  # MID 수에 따라 높이 조절
-                width=max(800, len(pivot_data.columns) * 40 + 200),  # 시간 슬롯 수에 따라 너비 조절
-                margin=dict(l=150, r=100, t=100, b=100),
-                font=dict(size=12)
+            if not pivot_1h.empty:
+                pivot_1h.columns = pd.to_datetime(pivot_1h.columns).strftime('%m/%d %H시')
+            result['1h'] = pivot_1h
+        
+        # 4시간 단위 데이터
+        if not df_4h.empty:
+            pivot_4h = df_4h.pivot_table(
+                index='mid',
+                columns='time_slot',
+                values='total_amount_krw',
+                fill_value=0
             )
-            
-            # HTML 파일 저장
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"heatmap_4h_trading_{timestamp}.html"
-            filepath = self.output_dir / filename
-            
-            fig.write_html(
-                str(filepath),
-                config={'displayModeBar': True, 'displaylogo': False}
+            if not pivot_4h.empty:
+                pivot_4h.columns = pd.to_datetime(pivot_4h.columns).strftime('%m/%d %H시')
+            result['4h'] = pivot_4h
+        
+        # 일 단위 데이터 생성 (1시간 또는 4시간 데이터에서)
+        df_for_daily = df_1h if not df_1h.empty else df_4h
+        if not df_for_daily.empty:
+            df_daily = df_for_daily.copy()
+            df_daily['date'] = pd.to_datetime(df_daily['time_slot']).dt.date
+            pivot_daily = df_daily.groupby(['mid', 'date'])['total_amount_krw'].sum().reset_index()
+            pivot_daily = pivot_daily.pivot_table(
+                index='mid',
+                columns='date',
+                values='total_amount_krw',
+                fill_value=0
             )
-            
-            logger.info(f"히트맵 저장 완료: {filepath}")
-            return str(filepath)
-            
-        except Exception as e:
-            logger.error(f"히트맵 생성 실패: {str(e)}")
-            return ""
+            if not pivot_daily.empty:
+                pivot_daily.columns = pd.to_datetime(pivot_daily.columns).strftime('%m/%d')
+            result['daily'] = pivot_daily
+        
+        return result
     
-    def create_trading_timeline(self, df_4h: pd.DataFrame, title: str = "시간대별 거래 추이") -> str:
+    def create_integrated_dashboard(self, df_1h: pd.DataFrame, df_4h: pd.DataFrame, df_day: pd.DataFrame) -> str:
         """
-        시간대별 거래 추이 라인 차트 생성
+        통합 대시보드 생성 (히트맵을 상단 전체 너비로 배치)
         
         Args:
+            df_1h: 1시간 단위 거래 데이터
             df_4h: 4시간 단위 거래 데이터
-            title: 차트 제목
-        
-        Returns:
-            저장된 HTML 파일 경로
-        """
-        try:
-            if df_4h.empty:
-                logger.warning("데이터가 비어있어 타임라인을 생성할 수 없습니다.")
-                return ""
-            
-            # 시간별 전체 거래금액 집계
-            timeline_data = df_4h.groupby('time_slot').agg({
-                'buy_amount_krw': 'sum',
-                'sell_amount_krw': 'sum',
-                'total_amount_krw': 'sum',
-                'mid': 'count'  # 활성 사용자 수
-            }).reset_index()
-            
-            timeline_data.columns = ['time_slot', 'buy_total', 'sell_total', 'total', 'active_users']
-            
-            # 서브플롯 생성
-            fig = make_subplots(
-                rows=2, cols=1,
-                subplot_titles=('거래금액 추이', '활성 사용자 수'),
-                vertical_spacing=0.1,
-                specs=[[{"secondary_y": False}], [{"secondary_y": False}]]
-            )
-            
-            # 거래금액 라인 차트
-            fig.add_trace(
-                go.Scatter(
-                    x=timeline_data['time_slot'],
-                    y=timeline_data['buy_total'],
-                    mode='lines+markers',
-                    name='매수',
-                    line=dict(color='red', width=2),
-                    marker=dict(size=6)
-                ),
-                row=1, col=1
-            )
-            
-            fig.add_trace(
-                go.Scatter(
-                    x=timeline_data['time_slot'],
-                    y=timeline_data['sell_total'],
-                    mode='lines+markers',
-                    name='매도',
-                    line=dict(color='blue', width=2),
-                    marker=dict(size=6)
-                ),
-                row=1, col=1
-            )
-            
-            fig.add_trace(
-                go.Scatter(
-                    x=timeline_data['time_slot'],
-                    y=timeline_data['total'],
-                    mode='lines+markers',
-                    name='전체',
-                    line=dict(color='green', width=3, dash='dash'),
-                    marker=dict(size=8)
-                ),
-                row=1, col=1
-            )
-            
-            # 활성 사용자 수 바 차트
-            fig.add_trace(
-                go.Bar(
-                    x=timeline_data['time_slot'],
-                    y=timeline_data['active_users'],
-                    name='활성 사용자',
-                    marker_color='lightblue'
-                ),
-                row=2, col=1
-            )
-            
-            # 레이아웃 업데이트
-            fig.update_xaxes(title_text="시간", row=2, col=1, tickangle=-45)
-            fig.update_yaxes(title_text="거래금액 (원)", row=1, col=1)
-            fig.update_yaxes(title_text="사용자 수", row=2, col=1)
-            
-            fig.update_layout(
-                title={
-                    'text': title,
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'font': {'size': 20}
-                },
-                height=800,
-                showlegend=True,
-                hovermode='x unified'
-            )
-            
-            # HTML 파일 저장
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"timeline_4h_trading_{timestamp}.html"
-            filepath = self.output_dir / filename
-            
-            fig.write_html(
-                str(filepath),
-                config={'displayModeBar': True, 'displaylogo': False}
-            )
-            
-            logger.info(f"타임라인 차트 저장 완료: {filepath}")
-            return str(filepath)
-            
-        except Exception as e:
-            logger.error(f"타임라인 생성 실패: {str(e)}")
-            return ""
-    
-    def create_user_ranking_chart(self, df_4h: pd.DataFrame, top_n: int = 20, 
-                                 title: str = "상위 거래자 순위") -> str:
-        """
-        거래금액 기준 상위 사용자 바 차트 생성
-        
-        Args:
-            df_4h: 4시간 단위 거래 데이터
-            top_n: 표시할 상위 사용자 수
-            title: 차트 제목
-        
-        Returns:
-            저장된 HTML 파일 경로
-        """
-        try:
-            if df_4h.empty:
-                logger.warning("데이터가 비어있어 순위 차트를 생성할 수 없습니다.")
-                return ""
-            
-            # 사용자별 거래금액 집계
-            user_summary = df_4h.groupby('mid').agg({
-                'buy_amount_krw': 'sum',
-                'sell_amount_krw': 'sum',
-                'total_amount_krw': 'sum',
-                'trade_count': 'sum'
-            }).reset_index()
-            
-            # 상위 N명 선택
-            top_users = user_summary.nlargest(top_n, 'total_amount_krw')
-            
-            # 스택 바 차트 생성
-            fig = go.Figure()
-            
-            fig.add_trace(go.Bar(
-                name='매수',
-                x=top_users['mid'],
-                y=top_users['buy_amount_krw'],
-                marker_color='red',
-                text=top_users['buy_amount_krw'].apply(lambda x: f'₩{x/1e9:.1f}B'),
-                textposition='inside'
-            ))
-            
-            fig.add_trace(go.Bar(
-                name='매도',
-                x=top_users['mid'],
-                y=top_users['sell_amount_krw'],
-                marker_color='blue',
-                text=top_users['sell_amount_krw'].apply(lambda x: f'₩{x/1e9:.1f}B'),
-                textposition='inside'
-            ))
-            
-            # 레이아웃 설정
-            fig.update_layout(
-                title={
-                    'text': f"{title} (Top {top_n})",
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'font': {'size': 20}
-                },
-                barmode='stack',
-                xaxis={'title': 'MID', 'tickangle': -45},
-                yaxis={'title': '거래금액 (원)'},
-                height=600,
-                showlegend=True,
-                hovermode='x'
-            )
-            
-            # HTML 파일 저장
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"ranking_top{top_n}_{timestamp}.html"
-            filepath = self.output_dir / filename
-            
-            fig.write_html(
-                str(filepath),
-                config={'displayModeBar': True, 'displaylogo': False}
-            )
-            
-            logger.info(f"순위 차트 저장 완료: {filepath}")
-            return str(filepath)
-            
-        except Exception as e:
-            logger.error(f"순위 차트 생성 실패: {str(e)}")
-            return ""
-    
-    def create_daily_pattern_analysis(self, df_day: pd.DataFrame, title: str = "일별 거래 패턴 분석") -> str:
-        """
-        일별 거래 패턴 분석 대시보드 생성
-        
-        Args:
             df_day: 일별 거래 상세 데이터
-            title: 대시보드 제목
         
         Returns:
             저장된 HTML 파일 경로
         """
         try:
-            if df_day.empty:
-                logger.warning("데이터가 비어있어 일별 패턴 분석을 생성할 수 없습니다.")
-                return ""
+            # 히트맵 데이터 준비
+            heatmap_data = self.prepare_heatmap_data(df_1h, df_4h)
             
-            # 서브플롯 생성 (2x2 그리드)
+            # 서브플롯 생성 (4행 2열 - 히트맵은 상단 전체)
             fig = make_subplots(
-                rows=2, cols=2,
+                rows=4, cols=2,
                 subplot_titles=(
-                    '일별 거래금액 추이',
-                    '마켓별 거래 비중',
-                    '인기 종목 Top 10',
-                    '일별 활성 사용자 및 거래 건수'
+                    '거래 히트맵 (시간대별 거래금액)', '',
+                    '시간대별 거래 추이', '상위 거래자 Top 20',
+                    '마켓별 거래 비중', '일별 거래 패턴',
+                    '종목별 거래량 Top 10', ''
                 ),
                 specs=[
-                    [{"type": "scatter"}, {"type": "pie"}],
-                    [{"type": "bar"}, {"secondary_y": True}]
+                    [{"colspan": 2, "type": "heatmap"}, None],  # 히트맵 - 전체 너비
+                    [{"type": "scatter"}, {"type": "bar"}],      # 차트 2개
+                    [{"type": "pie"}, {"type": "scatter"}],      # 차트 2개
+                    [{"type": "bar"}, {"type": "scatter"}]       # 차트 2개 (빈 공간 활용)
                 ],
-                vertical_spacing=0.15,
-                horizontal_spacing=0.15
+                vertical_spacing=0.08,
+                horizontal_spacing=0.12,
+                row_heights=[0.35, 0.25, 0.25, 0.15]  # 히트맵을 크게
             )
             
-            # 1. 일별 거래금액 추이
-            daily_summary = df_day.groupby('trade_date').agg({
-                'total_amount_krw': 'sum'
-            }).reset_index()
+            # 1. 히트맵 (상단 전체 너비)
+            default_heatmap = '4h' if '4h' in heatmap_data else ('1h' if '1h' in heatmap_data else 'daily')
+            if default_heatmap in heatmap_data and not heatmap_data[default_heatmap].empty:
+                pivot_data = heatmap_data[default_heatmap]
+                fig.add_trace(
+                    go.Heatmap(
+                        z=pivot_data.values,
+                        x=pivot_data.columns,
+                        y=pivot_data.index,
+                        colorscale=self.theme['heat_colorscale'],
+                        colorbar=dict(
+                            title="거래금액(원)",
+                            tickfont=dict(color=self.theme['text_color']),
+                            len=0.3,
+                            y=0.85,
+                            yanchor="top"
+                        ),
+                        hovertemplate="MID: %{y}<br>시간: %{x}<br>금액: ₩%{z:,.0f}<extra></extra>",
+                        showscale=True
+                    ),
+                    row=1, col=1
+                )
             
-            fig.add_trace(
-                go.Scatter(
-                    x=daily_summary['trade_date'],
-                    y=daily_summary['total_amount_krw'],
-                    mode='lines+markers',
-                    name='일별 거래금액',
-                    line=dict(color='green', width=2)
-                ),
-                row=1, col=1
-            )
+            # 2. 시간대별 거래 추이
+            df_for_timeline = df_4h if not df_4h.empty else df_1h
+            if not df_for_timeline.empty:
+                timeline_data = df_for_timeline.groupby('time_slot').agg({
+                    'buy_amount_krw': 'sum',
+                    'sell_amount_krw': 'sum',
+                    'total_amount_krw': 'sum'
+                }).reset_index()
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=timeline_data['time_slot'],
+                        y=timeline_data['buy_amount_krw'],
+                        mode='lines+markers',
+                        name='매수',
+                        line=dict(color=self.theme['primary_colors'][0], width=2),
+                        marker=dict(size=6)
+                    ),
+                    row=2, col=1
+                )
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=timeline_data['time_slot'],
+                        y=timeline_data['sell_amount_krw'],
+                        mode='lines+markers',
+                        name='매도',
+                        line=dict(color=self.theme['primary_colors'][2], width=2),
+                        marker=dict(size=6)
+                    ),
+                    row=2, col=1
+                )
             
-            # 2. 마켓별 거래 비중
-            market_summary = df_day.groupby('market_nm')['total_amount_krw'].sum().reset_index()
+            # 3. 상위 거래자 Top 20
+            if not df_for_timeline.empty:
+                user_summary = df_for_timeline.groupby('mid').agg({
+                    'total_amount_krw': 'sum'
+                }).reset_index().nlargest(20, 'total_amount_krw')
+                
+                fig.add_trace(
+                    go.Bar(
+                        x=user_summary['mid'],
+                        y=user_summary['total_amount_krw'],
+                        marker_color=self.theme['primary_colors'][1],
+                        text=user_summary['total_amount_krw'].apply(lambda x: f'₩{x/1e9:.1f}B'),
+                        textposition='outside',
+                        textfont=dict(color=self.theme['text_color'], size=10),
+                        hovertemplate="MID: %{x}<br>금액: ₩%{y:,.0f}<extra></extra>",
+                        showlegend=False
+                    ),
+                    row=2, col=2
+                )
             
-            fig.add_trace(
-                go.Pie(
-                    labels=market_summary['market_nm'],
-                    values=market_summary['total_amount_krw'],
-                    name='마켓 비중'
-                ),
-                row=1, col=2
-            )
+            # 4. 마켓별 거래 비중
+            if not df_day.empty and 'market_nm' in df_day.columns:
+                market_summary = df_day.groupby('market_nm')['total_amount_krw'].sum().reset_index()
+                
+                fig.add_trace(
+                    go.Pie(
+                        labels=market_summary['market_nm'],
+                        values=market_summary['total_amount_krw'],
+                        hole=0.4,
+                        marker=dict(colors=self.theme['primary_colors']),
+                        textfont=dict(color=self.theme['text_color']),
+                        hovertemplate="%{label}<br>₩%{value:,.0f}<br>%{percent}<extra></extra>",
+                        showlegend=True
+                    ),
+                    row=3, col=1
+                )
             
-            # 3. 인기 종목 Top 10
-            ticker_summary = df_day.groupby('ticker_nm')['total_amount_krw'].sum().nlargest(10).reset_index()
+            # 5. 일별 거래 패턴
+            if not df_day.empty:
+                daily_summary = df_day.groupby('trade_date').agg({
+                    'total_amount_krw': 'sum',
+                    'mid': 'nunique'
+                }).reset_index()
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=daily_summary['trade_date'],
+                        y=daily_summary['total_amount_krw'],
+                        mode='lines+markers',
+                        name='일별 거래액',
+                        line=dict(color=self.theme['accent_colors'][0], width=3),
+                        marker=dict(size=8),
+                        hovertemplate="날짜: %{x}<br>금액: ₩%{y:,.0f}<extra></extra>"
+                    ),
+                    row=3, col=2
+                )
             
-            fig.add_trace(
-                go.Bar(
-                    x=ticker_summary['ticker_nm'],
-                    y=ticker_summary['total_amount_krw'],
-                    name='거래금액',
-                    marker_color='lightblue'
-                ),
-                row=2, col=1
-            )
+            # 6. 종목별 거래량 Top 10
+            if not df_day.empty and 'ticker_nm' in df_day.columns:
+                ticker_summary = df_day.groupby('ticker_nm')['total_amount_krw'].sum().nlargest(10).reset_index()
+                
+                fig.add_trace(
+                    go.Bar(
+                        x=ticker_summary['ticker_nm'],
+                        y=ticker_summary['total_amount_krw'],
+                        marker_color=self.theme['primary_colors'][3],
+                        text=ticker_summary['total_amount_krw'].apply(lambda x: f'₩{x/1e6:.0f}M'),
+                        textposition='outside',
+                        textfont=dict(color=self.theme['text_color'], size=10),
+                        hovertemplate="종목: %{x}<br>금액: ₩%{y:,.0f}<extra></extra>",
+                        showlegend=False
+                    ),
+                    row=4, col=1
+                )
             
-            # 4. 일별 활성 사용자 및 거래 건수
-            daily_activity = df_day.groupby('trade_date').agg({
-                'mid': 'nunique',
-                'total_trades': 'sum'
-            }).reset_index()
-            
-            fig.add_trace(
-                go.Bar(
-                    x=daily_activity['trade_date'],
-                    y=daily_activity['mid'],
-                    name='활성 사용자',
-                    marker_color='orange',
-                    yaxis='y3'
-                ),
-                row=2, col=2
-            )
-            
-            fig.add_trace(
-                go.Scatter(
-                    x=daily_activity['trade_date'],
-                    y=daily_activity['total_trades'],
-                    mode='lines+markers',
-                    name='거래 건수',
-                    line=dict(color='red', width=2),
-                    yaxis='y4'
-                ),
-                row=2, col=2,
-                secondary_y=True
-            )
+            # 7. 활성 사용자 추이 (추가)
+            if not df_day.empty:
+                daily_users = df_day.groupby('trade_date')['mid'].nunique().reset_index()
+                daily_users.columns = ['trade_date', 'active_users']
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=daily_users['trade_date'],
+                        y=daily_users['active_users'],
+                        mode='lines+markers',
+                        name='활성 사용자',
+                        line=dict(color=self.theme['primary_colors'][4], width=2),
+                        marker=dict(size=6),
+                        hovertemplate="날짜: %{x}<br>사용자: %{y}명<extra></extra>"
+                    ),
+                    row=4, col=2
+                )
             
             # 레이아웃 업데이트
-            fig.update_xaxes(title_text="날짜", row=1, col=1, tickangle=-45)
-            fig.update_xaxes(title_text="종목", row=2, col=1, tickangle=-45)
-            fig.update_xaxes(title_text="날짜", row=2, col=2, tickangle=-45)
-            
-            fig.update_yaxes(title_text="거래금액 (원)", row=1, col=1)
-            fig.update_yaxes(title_text="거래금액 (원)", row=2, col=1)
-            fig.update_yaxes(title_text="사용자 수", row=2, col=2)
-            fig.update_yaxes(title_text="거래 건수", row=2, col=2, secondary_y=True)
-            
             fig.update_layout(
                 title={
-                    'text': title,
+                    'text': 'Black Heatmap Trading Dashboard',
                     'x': 0.5,
                     'xanchor': 'center',
-                    'font': {'size': 24}
+                    'font': {'size': 28, 'color': self.theme['text_color']}
                 },
-                height=900,
-                showlegend=True
+                showlegend=True,
+                legend=dict(
+                    font=dict(color=self.theme['text_color']),
+                    bgcolor='rgba(26, 30, 41, 0.8)',
+                    x=0.01,
+                    y=0.55
+                ),
+                height=1400,  # 높이 증가
+                plot_bgcolor=self.theme['bg_color'],
+                paper_bgcolor=self.theme['paper_color'],
+                font={'color': self.theme['text_color']},
+                hovermode='closest'
             )
+            
+            # 모든 축 스타일 업데이트
+            fig.update_xaxes(
+                gridcolor=self.theme['grid_color'],
+                color=self.theme['text_color'],
+                tickangle=-45
+            )
+            fig.update_yaxes(
+                gridcolor=self.theme['grid_color'],
+                color=self.theme['text_color']
+            )
+            
+            # 히트맵 축 특별 처리 (더 많은 라벨 표시)
+            fig.update_xaxes(
+                row=1, col=1,
+                tickmode='linear',
+                tick0=0,
+                dtick=1 if len(pivot_data.columns) < 50 else 2
+            )
+            
+            # 드롭다운 메뉴 추가 (히트맵 시간 단위 선택)
+            updatemenus = []
+            if heatmap_data:
+                buttons = []
+                
+                if '1h' in heatmap_data and not heatmap_data['1h'].empty:
+                    buttons.append(
+                        dict(
+                            label="1시간",
+                            method="restyle",
+                            args=[{
+                                "z": [heatmap_data['1h'].values],
+                                "x": [heatmap_data['1h'].columns],
+                                "y": [heatmap_data['1h'].index]
+                            }, [0]]
+                        )
+                    )
+                
+                if '4h' in heatmap_data and not heatmap_data['4h'].empty:
+                    buttons.append(
+                        dict(
+                            label="4시간",
+                            method="restyle",
+                            args=[{
+                                "z": [heatmap_data['4h'].values],
+                                "x": [heatmap_data['4h'].columns],
+                                "y": [heatmap_data['4h'].index]
+                            }, [0]]
+                        )
+                    )
+                
+                if 'daily' in heatmap_data and not heatmap_data['daily'].empty:
+                    buttons.append(
+                        dict(
+                            label="1일",
+                            method="restyle",
+                            args=[{
+                                "z": [heatmap_data['daily'].values],
+                                "x": [heatmap_data['daily'].columns],
+                                "y": [heatmap_data['daily'].index]
+                            }, [0]]
+                        )
+                    )
+                
+                if buttons:
+                    updatemenus.append(
+                        dict(
+                            type="dropdown",
+                            buttons=buttons,
+                            x=0.02,
+                            y=0.95,
+                            xanchor="left",
+                            yanchor="top",
+                            bgcolor='rgba(26, 30, 41, 0.9)',
+                            bordercolor=self.theme['primary_colors'][0],
+                            font=dict(color=self.theme['text_color'])
+                        )
+                    )
+            
+            if updatemenus:
+                fig.update_layout(updatemenus=updatemenus)
             
             # HTML 파일 저장
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"daily_pattern_analysis_{timestamp}.html"
+            filename = f"trading_dashboard_{timestamp}.html"
             filepath = self.output_dir / filename
             
             fig.write_html(
                 str(filepath),
-                config={'displayModeBar': True, 'displaylogo': False}
+                config={
+                    'displayModeBar': True,
+                    'displaylogo': False,
+                    'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
+                },
+                include_plotlyjs='cdn'
             )
             
-            logger.info(f"일별 패턴 분석 저장 완료: {filepath}")
+            logger.info(f"통합 대시보드 저장 완료: {filepath}")
             return str(filepath)
             
         except Exception as e:
-            logger.error(f"일별 패턴 분석 생성 실패: {str(e)}")
+            logger.error(f"통합 대시보드 생성 실패: {str(e)}")
             return ""
     
-    def create_all_visualizations(self, df_4h: pd.DataFrame, df_day: pd.DataFrame) -> dict:
+    def create_all_visualizations(self, df_1h: pd.DataFrame, df_4h: pd.DataFrame, df_day: pd.DataFrame) -> dict:
         """
-        모든 시각화를 한번에 생성
+        모든 시각화를 통합 대시보드로 생성
         
         Args:
+            df_1h: 1시간 단위 거래 데이터
             df_4h: 4시간 단위 거래 데이터
             df_day: 일별 거래 상세 데이터
         
@@ -461,21 +438,13 @@ class TradingVisualizer:
         """
         results = {}
         
-        logger.info("시각화 생성 시작...")
+        logger.info("통합 대시보드 생성 시작...")
         
-        # 1. 히트맵
-        results['heatmap'] = self.create_4h_heatmap(df_4h)
+        # 통합 대시보드 생성
+        dashboard_path = self.create_integrated_dashboard(df_1h, df_4h, df_day)
+        if dashboard_path:
+            results['integrated_dashboard'] = dashboard_path
         
-        # 2. 타임라인
-        results['timeline'] = self.create_trading_timeline(df_4h)
-        
-        # 3. 순위 차트
-        results['ranking'] = self.create_user_ranking_chart(df_4h)
-        
-        # 4. 일별 패턴 분석
-        if not df_day.empty:
-            results['daily_pattern'] = self.create_daily_pattern_analysis(df_day)
-        
-        logger.info("모든 시각화 생성 완료")
+        logger.info("통합 대시보드 생성 완료")
         
         return results

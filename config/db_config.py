@@ -25,11 +25,10 @@ class OracleConfig:
 class RedshiftConfig:
     """Redshift 데이터베이스 설정"""
     host: str = ""
-    port: int = 5439
+    port: int = 40127  # 기본 포트를 40127로 변경
     database: str = ""
     username: str = ""
     password: str = ""
-    schema: Optional[str] = "public"
 
 def load_config():
     """환경변수에서 데이터베이스 설정 로드"""
@@ -39,19 +38,18 @@ def load_config():
         host=os.getenv('ORACLE_HOST', '127.0.0.1'),
         port=int(os.getenv('ORACLE_PORT', '40112')),
         service_name=os.getenv('ORACLE_SERVICE_NAME', ''),
-        username=os.getenv('ORACLE_USERNAME', ''),
+        username=os.getenv('ORACLE_USERNAME', ''),  # ORACLE_USERNAME 추가
         password=os.getenv('ORACLE_PASSWORD', ''),
         driver_path=os.getenv('ORACLE_DRIVER_PATH', r'C:\ojdbc11-21.5.0.0.jar')
     )
     
-    # Redshift 설정
+    # Redshift 설정 (REDSHIFT_SCHEMA 제거)
     redshift_config = RedshiftConfig(
-        host=os.getenv('REDSHIFT_HOST', ''),
-        port=int(os.getenv('REDSHIFT_PORT', '5439')),
-        database=os.getenv('REDSHIFT_DATABASE', ''),
+        host=os.getenv('REDSHIFT_HOST', '127.0.0.1'),
+        port=int(os.getenv('REDSHIFT_PORT', '40127')),
+        database=os.getenv('REDSHIFT_DATABASE', 'prod'),
         username=os.getenv('REDSHIFT_USERNAME', ''),
-        password=os.getenv('REDSHIFT_PASSWORD', ''),
-        schema=os.getenv('REDSHIFT_SCHEMA', 'public')
+        password=os.getenv('REDSHIFT_PASSWORD', '')
     )
     
     # 설정 검증

@@ -106,6 +106,33 @@ class RedshiftUserProcessor:
             logger.error(f"사용자 가입일자 조회 실패: {str(e)}")
             return pd.DataFrame()
     
+    def get_1h_buysell_amount(self, user_id_list: List[str], start_time: str, end_time: str) -> pd.DataFrame:
+        """
+        1시간 단위 거래금액 집계 조회
+        
+        Args:
+            user_id_list: 사용자 ID 리스트
+            start_time: 시작 시간 (YYYY-MM-DD HH:MI:SS)
+            end_time: 종료 시간 (YYYY-MM-DD HH:MI:SS)
+        
+        Returns:
+            1시간 단위 거래금액 DataFrame
+        """
+        try:
+            with RedshiftConnector(self.redshift_config) as connector:
+                query = self.prepare_query_with_params(
+                    'orderbook_1h_summary',
+                    user_id_list,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+                df = connector.execute_query(query)
+                logger.info(f"1시간 단위 거래금액 조회 완료: {len(df)}건")
+                return df
+        except Exception as e:
+            logger.error(f"1시간 단위 거래금액 조회 실패: {str(e)}")
+            return pd.DataFrame()
+    
     def get_4h_buysell_amount(self, user_id_list: List[str], start_time: str, end_time: str) -> pd.DataFrame:
         """
         4시간 단위 거래금액 집계 조회
@@ -192,10 +219,12 @@ class RedshiftUserProcessor:
             df_join_date = self.get_user_join_date(mid_list)
             
             # 4. 거래 데이터 조회 (start_time과 end_time이 제공된 경우)
+            df_1h_buysell_amountkrw = pd.DataFrame()
             df_4h_buysell_amountkrw = pd.DataFrame()
             df_day_buysell_info = pd.DataFrame()
             
             if start_time and end_time:
+                df_1h_buysell_amountkrw = self.get_1h_buysell_amount(mid_list, start_time, end_time)
                 df_4h_buysell_amountkrw = self.get_4h_buysell_amount(mid_list, start_time, end_time)
                 df_day_buysell_info = self.get_daily_buysell_info(mid_list, start_time, end_time)
             
@@ -219,6 +248,9 @@ class RedshiftUserProcessor:
                 df_base = df_base.rename(columns={'user_id': 'mid'})
             
             # 거래 데이터에서도 user_id를 mid로 변경
+            if not df_1h_buysell_amountkrw.empty and 'user_id' in df_1h_buysell_amountkrw.columns:
+                df_1h_buysell_amountkrw = df_1h_buysell_amountkrw.rename(columns={'user_id': 'mid'})
+            
             if not df_4h_buysell_amountkrw.empty and 'user_id' in df_4h_buysell_amountkrw.columns:
                 df_4h_buysell_amountkrw = df_4h_buysell_amountkrw.rename(columns={'user_id': 'mid'})
             
@@ -229,6 +261,7 @@ class RedshiftUserProcessor:
             
             return {
                 'base_info': df_base,
+                'df_1h_buysell_amountkrw': df_1h_buysell_amountkrw,
                 'df_4h_buysell_amountkrw': df_4h_buysell_amountkrw,
                 'df_day_buysell_info': df_day_buysell_info
             }
