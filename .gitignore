@@ -1,7 +1,7 @@
-# 환경 변수 파일 (중요: 절대 커밋하면 안됨!)
+# 환경 변수 파일
 .env
 .env.local
-*.env
+.env.*.local
 
 # Python
 __pycache__/
@@ -9,10 +9,25 @@ __pycache__/
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual Environment
-venv/
 env/
+venv/
 ENV/
 env.bak/
 venv.bak/
@@ -28,16 +43,27 @@ venv.bak/
 *.log
 logs/
 
-# Data files
+# Output files
+output/
 *.csv
 *.xlsx
 *.xls
+
+# Data files
 data/
-output/
 
 # JDBC Drivers
 *.jar
+drivers/
 
-# Temporary files
-*.tmp
-*.bak
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
