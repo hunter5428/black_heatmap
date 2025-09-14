@@ -1,0 +1,43 @@
+# 환경 변수 파일 (중요: 절대 커밋하면 안됨!)
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+data/
+output/
+
+# JDBC Drivers
+*.jar
+
+# Temporary files
+*.tmp
+*.bak
