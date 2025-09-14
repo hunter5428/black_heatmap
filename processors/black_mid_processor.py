@@ -5,6 +5,7 @@ from pathlib import Path
 from config.db_config import load_config
 from db.oracle_connector import OracleConnector
 from utils.excel_processor import ExcelProcessor
+from utils.query_loader import QueryLoader
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class BlackMidProcessor:
     def __init__(self):
         self.oracle_config, _ = load_config()
         self.excel_processor = ExcelProcessor()
+        self.query_loader = QueryLoader()
     
     def validate_mid_format(self, mid_list: List[str]) -> List[str]:
         """
@@ -39,9 +41,9 @@ class BlackMidProcessor:
         
         return validated_list
     
-    def generate_query(self, mid_list: List[str]) -> str:
+    def prepare_query_with_mids(self, mid_list: List[str]) -> str:
         """
-        MID 리스트를 기반으로 고객 정보 조회 쿼리 생성
+        MID 리스트를 쿼리에 적용
         
         Args:
             mid_list: 조회할 MID 리스트
@@ -49,76 +51,15 @@ class BlackMidProcessor:
         Returns:
             SQL 쿼리 문자열
         """
+        # 쿼리 파일 로드
+        base_query = self.query_loader.load_query('oracledb', 'black_mid_customer_info')
+        
         # MID 리스트를 SQL IN 절 형식으로 변환
         mid_str = "', '".join(mid_list)
+        mid_str = f"'{mid_str}'"
         
-        query = f"""
-        SELECT DISTINCT
-            -- CID
-            c.CUST_ID AS "CID",
-            
-            -- 이름(성명)
-            c.CUST_KO_NM AS "이름",
-            
-            -- 성별
-            (SELECT AML_DTL_CD_NM 
-             FROM SM_CD_DTL 
-             WHERE AML_COMN_CD = 'CUST_GNDR_CD' 
-               AND AML_DTL_CD = c.CUST_GNDR_CD) AS "성별",
-            
-            -- 생년월일
-            c.CUST_BDAY AS "생년월일",
-            
-            -- 고액자산가
-            c.CLB_YN AS "고액자산가",
-            
-            -- 거주지 정보 (주소 + 상세주소)
-            CASE 
-                WHEN c.CUST_DTL_ADDR IS NOT NULL 
-                THEN c.CUST_ADDR || ' ' || c.CUST_DTL_ADDR
-                ELSE c.CUST_ADDR
-            END AS "거주지정보",
-            
-            -- 직장명
-            c.WPLC_NM AS "직장명",
-            
-            -- 직장 정보 (직장 주소 + 상세주소)
-            CASE 
-                WHEN c.WPLC_DTL_ADDR IS NOT NULL 
-                THEN c.WPLC_ADDR || ' ' || c.WPLC_DTL_ADDR
-                ELSE c.WPLC_ADDR
-            END AS "직장정보",
-            
-            -- 핸드폰 번호 (연락처) - AES 복호화
-            AES_DECRYPT(c.CUST_TEL_NO) AS "핸드폰번호",
-            
-            -- E-mail 주소 - AES 복호화
-            AES_DECRYPT(c.CUST_EMAIL) AS "이메일주소",
-            
-            -- KYC 완료일시
-            TO_CHAR(c.KYC_EXE_FNS_DTM, 'YYYY-MM-DD HH24:MI:SS') AS "KYC완료일시",
-            
-            -- MID 정보 추가
-            COALESCE(m.MEM_ID, c.KYC_EXE_MEM_ID) AS "MID"
-            
-        FROM BTCAMLDB_OWN.KYC_CUST_BASE c
-        
-        -- MID 정보를 가진 회원 테이블과 조인
-        LEFT JOIN BTCAMLDB_OWN.KYC_MEM_BASE m
-            ON c.CUST_ID = m.CUST_ID
-        
-        WHERE 
-            -- 개인 고객만 조회 (CUST_TYPE_CD = '01')
-            c.CUST_TYPE_CD = '01'
-            
-            -- MID가 블랙리스트에 포함된 경우
-            AND (
-                m.MEM_ID IN ('{mid_str}')
-                OR c.KYC_EXE_MEM_ID IN ('{mid_str}')
-            )
-        
-        ORDER BY c.CUST_ID
-        """
+        # :mid_list 파라미터를 실제 MID 리스트로 치환
+        query = base_query.replace(':mid_list', mid_str)
         
         return query
     
@@ -143,7 +84,7 @@ class BlackMidProcessor:
             # 배치 처리
             for i in range(0, len(mid_list), batch_size):
                 batch_mid_list = mid_list[i:i+batch_size]
-                query = self.generate_query(batch_mid_list)
+                query = self.prepare_query_with_mids(batch_mid_list)
                 
                 logger.info(f"배치 {i//batch_size + 1} 조회 중... ({len(batch_mid_list)}개 MID)")
                 
